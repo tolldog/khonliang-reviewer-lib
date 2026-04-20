@@ -6,6 +6,7 @@ import json
 
 from khonliang_reviewer import (
     ArtifactRef,
+    ErrorCategory,
     ReviewFinding,
     ReviewRequest,
     ReviewResult,
@@ -129,6 +130,59 @@ def test_review_result_errored_carries_error_string():
     restored = ReviewResult.from_dict(result.to_dict())
     assert restored.disposition == "errored"
     assert restored.error == "backend timed out after 60s"
+
+
+def test_review_result_errored_carries_error_category():
+    result = ReviewResult(
+        request_id="req-7",
+        summary="",
+        disposition="errored",
+        error="claude binary not on PATH",
+        error_category="binary_not_found",
+    )
+    restored = ReviewResult.from_dict(result.to_dict())
+    assert restored.error_category == "binary_not_found"
+
+
+def test_review_result_error_category_defaults_empty():
+    result = ReviewResult(request_id="req-8", summary="all good")
+    restored = ReviewResult.from_dict(result.to_dict())
+    assert restored.error_category == ""
+
+
+def test_usage_event_round_trips_error_category():
+    event = UsageEvent(
+        timestamp=1776660000.0,
+        backend="claude_cli",
+        model="claude-opus-4-7",
+        disposition="errored",
+        error="subscription token expired",
+        error_category="auth_not_provisioned",
+    )
+    restored = UsageEvent.from_dict(event.to_dict())
+    assert restored.error_category == "auth_not_provisioned"
+    assert restored.error == "subscription token expired"
+
+
+def test_error_category_literal_includes_expected_values():
+    """The exported ``ErrorCategory`` alias documents the intended category set.
+
+    Providers should prefer these canonical values so downstream observers
+    (dashboards, gap reports) stay aligned across backends.
+    """
+    import typing
+
+    categories = set(typing.get_args(ErrorCategory))
+    assert categories >= {
+        "",
+        "auth_not_provisioned",
+        "binary_not_found",
+        "subprocess_timeout",
+        "nonzero_exit",
+        "malformed_envelope",
+        "backend_error",
+        "unknown",
+    }
 
 
 def test_review_request_kind_is_free_form():

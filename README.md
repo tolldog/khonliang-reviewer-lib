@@ -16,6 +16,9 @@ backend.
   future GPT/Gemini) implements.
 - `UsageEvent` + `ModelPricing` — token-accounting records and per-model
   pricing entries.
+- `ErrorCategory` — canonical error classifications so callers can branch
+  on error type without parsing free-form `error` strings. Used on both
+  `ReviewResult.error_category` and `UsageEvent.error_category`.
 - `estimate_api_cost` — pricing math so subscription-backed calls can be
   compared against pay-per-token API spend.
 - `ArtifactRef` — opaque pointer to bus artifacts so large inputs (diffs,

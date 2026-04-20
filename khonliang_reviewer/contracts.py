@@ -19,6 +19,23 @@ from typing import Any, Literal
 Severity = Literal["nit", "comment", "concern"]
 Disposition = Literal["posted", "dry_run", "errored"]
 
+#: Structured classification for errored reviews, so callers can branch on
+#: error type without parsing the free-form ``error`` string. Empty string is
+#: the default for successful / non-errored results. The enum is open in
+#: practice — providers may add new categories over time — but staying within
+#: the defined set keeps downstream observers (bus dashboards, gap reports,
+#: ops alerts) stable.
+ErrorCategory = Literal[
+    "",
+    "auth_not_provisioned",
+    "binary_not_found",
+    "subprocess_timeout",
+    "nonzero_exit",
+    "malformed_envelope",
+    "backend_error",
+    "unknown",
+]
+
 
 @dataclass(frozen=True)
 class ArtifactRef:
@@ -121,6 +138,7 @@ class UsageEvent:
     pr_number: int | None = None
     estimated_api_cost_usd: float = 0.0
     error: str = ""
+    error_category: str = ""
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)
@@ -139,6 +157,7 @@ class ReviewResult:
     findings: list[ReviewFinding] = field(default_factory=list)
     disposition: Disposition = "posted"
     error: str = ""
+    error_category: str = ""
     usage: UsageEvent | None = None
     backend: str = ""
     model: str = ""
@@ -164,6 +183,7 @@ class ReviewResult:
 __all__ = [
     "ArtifactRef",
     "Disposition",
+    "ErrorCategory",
     "ReviewFinding",
     "ReviewRequest",
     "ReviewResult",
