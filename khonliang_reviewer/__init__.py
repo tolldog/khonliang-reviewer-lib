@@ -9,6 +9,7 @@ storage also live in the agent, not here.
 from khonliang_reviewer.contracts import (
     ArtifactRef,
     Disposition,
+    ErrorCategory,
     ReviewFinding,
     ReviewRequest,
     ReviewResult,
@@ -22,6 +23,7 @@ from khonliang_reviewer.provider import ReviewProvider
 __all__ = [
     "ArtifactRef",
     "Disposition",
+    "ErrorCategory",
     "ModelPricing",
     "ReviewFinding",
     "ReviewProvider",
