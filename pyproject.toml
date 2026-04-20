@@ -1,0 +1,16 @@
+[project]
+name = "khonliang-reviewer-lib"
+version = "0.1.0"
+description = "Reusable review primitives for khonliang reviewer agents — provider contracts, usage accounting, and pricing math"
+requires-python = ">=3.11"
+dependencies = []
+
+[project.optional-dependencies]
+test = ["pytest>=8.0", "pytest-asyncio>=0.24"]
+
+[tool.setuptools.packages.find]
+include = ["khonliang_reviewer*"]
+
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
