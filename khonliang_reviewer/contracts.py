@@ -210,7 +210,21 @@ class ReviewResult:
     created_at: float = field(default_factory=time.time)
 
     def to_dict(self) -> dict[str, Any]:
-        return asdict(self)
+        """Serialize to a plain ``dict``.
+
+        Manually serializes the nested ``usage`` field via
+        :meth:`UsageEvent.to_dict` rather than letting :func:`asdict`
+        recurse into it — ``asdict`` bypasses custom ``to_dict`` methods
+        on nested dataclasses, which would re-emit ``findings_filtered_count``
+        even when 0 and break the omit-when-zero wire-shape guarantee
+        that ``UsageEvent.to_dict`` establishes. ``ReviewResult`` is the
+        typical on-wire path (``UsageEvent`` rarely ships standalone), so
+        the nested case is the one that has to hold the contract.
+        """
+        data = asdict(self)
+        if self.usage is not None:
+            data["usage"] = self.usage.to_dict()
+        return data
 
     @classmethod
     def from_dict(cls, data: dict[str, Any]) -> "ReviewResult":
