@@ -25,6 +25,11 @@ Severity = Literal["nit", "comment", "concern"]
 #: use :func:`severity_rank` to compare without hard-coding indices.
 SEVERITY_ORDER: tuple[Severity, ...] = ("nit", "comment", "concern")
 
+#: Precomputed rank lookup for :data:`SEVERITY_ORDER`. O(1) lookup that
+#: type-checks cleanly (``dict[str, int]`` accepts any ``str`` key without
+#: the ``Literal``/``str`` variance friction ``tuple.index`` has).
+_SEVERITY_RANK: dict[str, int] = {s: i for i, s in enumerate(SEVERITY_ORDER)}
+
 
 def severity_rank(severity: str) -> int:
     """Return the 0-based rank of ``severity`` within :data:`SEVERITY_ORDER`.
@@ -35,8 +40,8 @@ def severity_rank(severity: str) -> int:
     be treated as ``"nit"`` just because that's the lowest rank.
     """
     try:
-        return SEVERITY_ORDER.index(severity)  # type: ignore[arg-type]
-    except ValueError as exc:
+        return _SEVERITY_RANK[severity]
+    except KeyError as exc:
         raise ValueError(
             f"unknown severity {severity!r}; expected one of {list(SEVERITY_ORDER)}"
         ) from exc
@@ -173,7 +178,16 @@ class UsageEvent:
     findings_filtered_count: int = 0
 
     def to_dict(self) -> dict[str, Any]:
-        return asdict(self)
+        """Serialize to a plain ``dict``.
+
+        Omits ``findings_filtered_count`` from the serialized dict when 0
+        to preserve the pre-existing wire shape; decoder defaults to 0
+        when the key is absent.
+        """
+        data = asdict(self)
+        if data.get("findings_filtered_count", 0) == 0:
+            data.pop("findings_filtered_count", None)
+        return data
 
     @classmethod
     def from_dict(cls, data: dict[str, Any]) -> "UsageEvent":
