@@ -4,13 +4,17 @@ from __future__ import annotations
 
 import json
 
+import pytest
+
 from khonliang_reviewer import (
+    SEVERITY_ORDER,
     ArtifactRef,
     ErrorCategory,
     ReviewFinding,
     ReviewRequest,
     ReviewResult,
     UsageEvent,
+    severity_rank,
 )
 
 
@@ -190,3 +194,57 @@ def test_review_request_kind_is_free_form():
     for kind in ("pr_diff", "spec", "fr", "doc", "pr_description", "custom_kind_xyz"):
         request = ReviewRequest(kind=kind, content="body")
         assert ReviewRequest.from_dict(request.to_dict()).kind == kind
+
+
+# ---------------------------------------------------------------------------
+# Severity ordering helpers
+# ---------------------------------------------------------------------------
+
+
+def test_severity_order_is_low_to_high():
+    """Contract: ``SEVERITY_ORDER`` runs from least to most severe.
+
+    Any future helper (filters, threshold comparators) relies on this
+    axis direction — ``severity_rank("concern") > severity_rank("nit")``.
+    Flipping the tuple would silently reverse every filter; the test
+    locks the direction.
+    """
+    assert SEVERITY_ORDER == ("nit", "comment", "concern")
+
+
+def test_severity_rank_orders_strictly_increasing():
+    assert severity_rank("nit") < severity_rank("comment") < severity_rank("concern")
+
+
+def test_severity_rank_rejects_unknown_value():
+    with pytest.raises(ValueError, match="unknown severity"):
+        severity_rank("CRITICAL")
+
+
+def test_severity_rank_rejects_empty_string():
+    """Empty string is not a valid severity — don't let it collapse to rank 0."""
+    with pytest.raises(ValueError):
+        severity_rank("")
+
+
+# ---------------------------------------------------------------------------
+# UsageEvent.findings_filtered_count
+# ---------------------------------------------------------------------------
+
+
+def test_usage_event_findings_filtered_count_defaults_zero():
+    """Agents that don't filter keep the same on-wire shape as before."""
+    event = UsageEvent(timestamp=1.0, backend="ollama", model="qwen3.5")
+    assert event.findings_filtered_count == 0
+    assert event.to_dict()["findings_filtered_count"] == 0
+
+
+def test_usage_event_round_trips_findings_filtered_count():
+    event = UsageEvent(
+        timestamp=1.0,
+        backend="ollama",
+        model="qwen3.5",
+        findings_filtered_count=7,
+    )
+    restored = UsageEvent.from_dict(event.to_dict())
+    assert restored.findings_filtered_count == 7

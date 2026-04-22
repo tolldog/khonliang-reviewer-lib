@@ -17,6 +17,31 @@ from typing import Any, Literal
 
 
 Severity = Literal["nit", "comment", "concern"]
+
+#: Low-to-high severity ordering. Exposed as a tuple (rather than an
+#: :class:`enum.IntEnum`) because the contract is the :data:`Severity`
+#: ``Literal`` — callers already branch on string values. The tuple is
+#: the single source of truth for "is X more severe than Y?" questions;
+#: use :func:`severity_rank` to compare without hard-coding indices.
+SEVERITY_ORDER: tuple[Severity, ...] = ("nit", "comment", "concern")
+
+
+def severity_rank(severity: str) -> int:
+    """Return the 0-based rank of ``severity`` within :data:`SEVERITY_ORDER`.
+
+    Higher rank = more severe. Unknown values raise :class:`ValueError`
+    rather than silently collapsing to a default — severity labels cross
+    trust boundaries (provider output, skill args) and a typo shouldn't
+    be treated as ``"nit"`` just because that's the lowest rank.
+    """
+    try:
+        return SEVERITY_ORDER.index(severity)  # type: ignore[arg-type]
+    except ValueError as exc:
+        raise ValueError(
+            f"unknown severity {severity!r}; expected one of {list(SEVERITY_ORDER)}"
+        ) from exc
+
+
 Disposition = Literal["posted", "dry_run", "errored"]
 
 #: Structured classification for errored reviews, so callers can branch on
@@ -139,6 +164,13 @@ class UsageEvent:
     estimated_api_cost_usd: float = 0.0
     error: str = ""
     error_category: str = ""
+    #: Number of findings the consuming agent dropped from the
+    #: ``ReviewResult`` before returning to the caller (severity_floor
+    #: post-filter, content-gate rejections, etc.). Defaults to 0 so
+    #: agents that don't filter keep the same on-wire shape. Measured
+    #: over time this lets operators see how much noise different models
+    #: generate under a given floor without re-running reviews.
+    findings_filtered_count: int = 0
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)
@@ -187,6 +219,8 @@ __all__ = [
     "ReviewFinding",
     "ReviewRequest",
     "ReviewResult",
+    "SEVERITY_ORDER",
     "Severity",
     "UsageEvent",
+    "severity_rank",
 ]
