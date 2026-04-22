@@ -4,13 +4,17 @@ from __future__ import annotations
 
 import json
 
+import pytest
+
 from khonliang_reviewer import (
+    SEVERITY_ORDER,
     ArtifactRef,
     ErrorCategory,
     ReviewFinding,
     ReviewRequest,
     ReviewResult,
     UsageEvent,
+    severity_rank,
 )
 
 
@@ -190,3 +194,153 @@ def test_review_request_kind_is_free_form():
     for kind in ("pr_diff", "spec", "fr", "doc", "pr_description", "custom_kind_xyz"):
         request = ReviewRequest(kind=kind, content="body")
         assert ReviewRequest.from_dict(request.to_dict()).kind == kind
+
+
+# ---------------------------------------------------------------------------
+# Severity ordering helpers
+# ---------------------------------------------------------------------------
+
+
+def test_severity_order_is_low_to_high():
+    """Contract: ``SEVERITY_ORDER`` runs from least to most severe.
+
+    Any future helper (filters, threshold comparators) relies on this
+    axis direction — ``severity_rank("concern") > severity_rank("nit")``.
+    Flipping the tuple would silently reverse every filter; the test
+    locks the direction.
+    """
+    assert SEVERITY_ORDER == ("nit", "comment", "concern")
+
+
+def test_severity_rank_orders_strictly_increasing():
+    assert severity_rank("nit") < severity_rank("comment") < severity_rank("concern")
+
+
+def test_severity_rank_rejects_unknown_value():
+    with pytest.raises(ValueError, match="unknown severity"):
+        severity_rank("CRITICAL")
+
+
+def test_severity_rank_rejects_empty_string():
+    """Empty string is not a valid severity — don't let it collapse to rank 0."""
+    with pytest.raises(ValueError):
+        severity_rank("")
+
+
+# ---------------------------------------------------------------------------
+# UsageEvent.findings_filtered_count
+# ---------------------------------------------------------------------------
+
+
+def test_usage_event_findings_filtered_count_defaults_zero():
+    """Agents that don't filter keep the same on-wire shape as before.
+
+    ``to_dict()`` omits ``findings_filtered_count`` entirely when 0, so
+    strict JSON-schema consumers that predate the field don't observe a
+    new key. The in-memory field still defaults to 0 on the dataclass.
+    """
+    event = UsageEvent(timestamp=1.0, backend="ollama", model="qwen3.5")
+    assert event.findings_filtered_count == 0
+    assert "findings_filtered_count" not in event.to_dict()
+
+
+def test_usage_event_to_dict_emits_field_when_nonzero():
+    """Non-zero values must be emitted so operators can observe filtering."""
+    event = UsageEvent(
+        timestamp=1.0,
+        backend="ollama",
+        model="qwen3.5",
+        findings_filtered_count=3,
+    )
+    data = event.to_dict()
+    assert data["findings_filtered_count"] == 3
+
+
+def test_usage_event_from_dict_defaults_to_zero_when_key_absent():
+    """Decoder must tolerate dicts that predate the field (key absent -> 0).
+
+    Pairs with the omit-when-zero encoder to keep the round-trip
+    shape-preserving for unfiltered events.
+    """
+    data = {"timestamp": 1.0, "backend": "ollama", "model": "qwen3.5"}
+    restored = UsageEvent.from_dict(data)
+    assert restored.findings_filtered_count == 0
+
+
+def test_usage_event_round_trips_findings_filtered_count():
+    event = UsageEvent(
+        timestamp=1.0,
+        backend="ollama",
+        model="qwen3.5",
+        findings_filtered_count=7,
+    )
+    restored = UsageEvent.from_dict(event.to_dict())
+    assert restored.findings_filtered_count == 7
+
+
+def test_usage_event_round_trips_zero_value_via_omit():
+    """Zero round-trips through the omit-when-zero path back to 0."""
+    event = UsageEvent(timestamp=1.0, backend="ollama", model="qwen3.5")
+    restored = UsageEvent.from_dict(event.to_dict())
+    assert restored.findings_filtered_count == 0
+
+
+def test_review_result_to_dict_omits_nested_findings_filtered_count_when_zero():
+    """Nested ``usage`` dict inside ``ReviewResult.to_dict()`` must also omit the
+    key when zero.
+
+    ``ReviewResult.to_dict()`` is the typical on-wire shape — ``UsageEvent``
+    rarely ships standalone. A naive ``asdict(self)`` would bypass
+    ``UsageEvent.to_dict()`` and re-emit the zero value, silently breaking the
+    wire-shape guarantee round 1 established. This test locks the nested path.
+    """
+    result = ReviewResult(
+        request_id="req-nested-zero",
+        summary="all clean",
+        usage=UsageEvent(timestamp=1.0, backend="ollama", model="qwen3.5"),
+    )
+    data = result.to_dict()
+    assert "findings_filtered_count" not in data["usage"]
+
+
+def test_review_result_to_dict_emits_nested_findings_filtered_count_when_nonzero():
+    """Non-zero nested value must survive ``ReviewResult.to_dict()``.
+
+    Pairs with the omit-when-zero test: operators must still observe filtering
+    activity on the on-wire shape.
+    """
+    result = ReviewResult(
+        request_id="req-nested-nonzero",
+        summary="filtered some",
+        usage=UsageEvent(
+            timestamp=1.0,
+            backend="ollama",
+            model="qwen3.5",
+            findings_filtered_count=4,
+        ),
+    )
+    data = result.to_dict()
+    assert data["usage"]["findings_filtered_count"] == 4
+
+
+def test_review_result_round_trips_nested_findings_filtered_count():
+    """End-to-end: ``ReviewResult`` -> dict -> JSON -> dict -> ``ReviewResult``
+    preserves a non-zero nested counter.
+
+    The omit-when-zero path is covered by the other nested tests; this one
+    covers the non-trivial value through the full decode pipeline so the
+    backward-compat guarantee + new-field semantics are both locked in.
+    """
+    original = ReviewResult(
+        request_id="req-nested-rt",
+        summary="round-trip with filter",
+        usage=UsageEvent(
+            timestamp=1.0,
+            backend="ollama",
+            model="qwen3.5",
+            findings_filtered_count=2,
+        ),
+    )
+    restored = ReviewResult.from_dict(json.loads(json.dumps(original.to_dict())))
+    assert restored.usage is not None
+    assert restored.usage.findings_filtered_count == 2

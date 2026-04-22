@@ -7,6 +7,7 @@ storage also live in the agent, not here.
 """
 
 from khonliang_reviewer.contracts import (
+    SEVERITY_ORDER,
     ArtifactRef,
     Disposition,
     ErrorCategory,
@@ -15,6 +16,7 @@ from khonliang_reviewer.contracts import (
     ReviewResult,
     Severity,
     UsageEvent,
+    severity_rank,
 )
 from khonliang_reviewer.pricing import ModelPricing, estimate_api_cost
 from khonliang_reviewer.provider import ReviewProvider
@@ -29,7 +31,9 @@ __all__ = [
     "ReviewProvider",
     "ReviewRequest",
     "ReviewResult",
+    "SEVERITY_ORDER",
     "Severity",
     "UsageEvent",
     "estimate_api_cost",
+    "severity_rank",
 ]

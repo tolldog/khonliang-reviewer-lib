@@ -17,6 +17,36 @@ from typing import Any, Literal
 
 
 Severity = Literal["nit", "comment", "concern"]
+
+#: Low-to-high severity ordering. Exposed as a tuple (rather than an
+#: :class:`enum.IntEnum`) because the contract is the :data:`Severity`
+#: ``Literal`` — callers already branch on string values. The tuple is
+#: the single source of truth for "is X more severe than Y?" questions;
+#: use :func:`severity_rank` to compare without hard-coding indices.
+SEVERITY_ORDER: tuple[Severity, ...] = ("nit", "comment", "concern")
+
+#: Precomputed rank lookup for :data:`SEVERITY_ORDER`. O(1) lookup that
+#: type-checks cleanly (``dict[str, int]`` accepts any ``str`` key without
+#: the ``Literal``/``str`` variance friction ``tuple.index`` has).
+_SEVERITY_RANK: dict[str, int] = {s: i for i, s in enumerate(SEVERITY_ORDER)}
+
+
+def severity_rank(severity: str) -> int:
+    """Return the 0-based rank of ``severity`` within :data:`SEVERITY_ORDER`.
+
+    Higher rank = more severe. Unknown values raise :class:`ValueError`
+    rather than silently collapsing to a default — severity labels cross
+    trust boundaries (provider output, skill args) and a typo shouldn't
+    be treated as ``"nit"`` just because that's the lowest rank.
+    """
+    try:
+        return _SEVERITY_RANK[severity]
+    except KeyError as exc:
+        raise ValueError(
+            f"unknown severity {severity!r}; expected one of {list(SEVERITY_ORDER)}"
+        ) from exc
+
+
 Disposition = Literal["posted", "dry_run", "errored"]
 
 #: Structured classification for errored reviews, so callers can branch on
@@ -139,9 +169,25 @@ class UsageEvent:
     estimated_api_cost_usd: float = 0.0
     error: str = ""
     error_category: str = ""
+    #: Number of findings the consuming agent dropped from the
+    #: ``ReviewResult`` before returning to the caller (severity_floor
+    #: post-filter, content-gate rejections, etc.). Defaults to 0 so
+    #: agents that don't filter keep the same on-wire shape. Measured
+    #: over time this lets operators see how much noise different models
+    #: generate under a given floor without re-running reviews.
+    findings_filtered_count: int = 0
 
     def to_dict(self) -> dict[str, Any]:
-        return asdict(self)
+        """Serialize to a plain ``dict``.
+
+        Omits ``findings_filtered_count`` from the serialized dict when 0
+        to preserve the pre-existing wire shape; decoder defaults to 0
+        when the key is absent.
+        """
+        data = asdict(self)
+        if data.get("findings_filtered_count", 0) == 0:
+            data.pop("findings_filtered_count", None)
+        return data
 
     @classmethod
     def from_dict(cls, data: dict[str, Any]) -> "UsageEvent":
@@ -164,7 +210,21 @@ class ReviewResult:
     created_at: float = field(default_factory=time.time)
 
     def to_dict(self) -> dict[str, Any]:
-        return asdict(self)
+        """Serialize to a plain ``dict``.
+
+        Manually serializes the nested ``usage`` field via
+        :meth:`UsageEvent.to_dict` rather than letting :func:`asdict`
+        recurse into it — ``asdict`` bypasses custom ``to_dict`` methods
+        on nested dataclasses, which would re-emit ``findings_filtered_count``
+        even when 0 and break the omit-when-zero wire-shape guarantee
+        that ``UsageEvent.to_dict`` establishes. ``ReviewResult`` is the
+        typical on-wire path (``UsageEvent`` rarely ships standalone), so
+        the nested case is the one that has to hold the contract.
+        """
+        data = asdict(self)
+        if self.usage is not None:
+            data["usage"] = self.usage.to_dict()
+        return data
 
     @classmethod
     def from_dict(cls, data: dict[str, Any]) -> "ReviewResult":
@@ -187,6 +247,8 @@ __all__ = [
     "ReviewFinding",
     "ReviewRequest",
     "ReviewResult",
+    "SEVERITY_ORDER",
     "Severity",
     "UsageEvent",
+    "severity_rank",
 ]
