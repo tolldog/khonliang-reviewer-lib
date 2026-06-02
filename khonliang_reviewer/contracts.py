@@ -231,6 +231,11 @@ class ReviewResult:
         data = asdict(self)
         if self.usage is not None:
             data["usage"] = self.usage.to_dict()
+        # Omit dropped_findings when empty so the common (no-drop) path's
+        # on-wire shape is unchanged — mirrors UsageEvent.to_dict's
+        # omit-when-zero convention. from_dict treats a missing key as [].
+        if not self.dropped_findings:
+            data.pop("dropped_findings", None)
         return data
 
     @classmethod
