@@ -124,6 +124,27 @@ def test_review_result_without_usage():
     assert restored.disposition == "dry_run"
 
 
+def test_review_result_dropped_findings_round_trip():
+    """dropped_findings (the distill audit trail) defaults to empty and
+    survives to_dict/from_dict as reconstructed ReviewFinding objects.
+    """
+    assert ReviewResult(request_id="r", summary="s").dropped_findings == []
+
+    result = ReviewResult(
+        request_id="req-dropped",
+        summary="one concern (1 nit filtered).",
+        findings=[ReviewFinding(severity="concern", title="real", body="b")],
+        dropped_findings=[
+            ReviewFinding(severity="nit", title="below floor", body="filtered out"),
+        ],
+        disposition="posted",
+    )
+    restored = ReviewResult.from_dict(result.to_dict())
+    assert restored == result
+    assert [f.title for f in restored.dropped_findings] == ["below floor"]
+    assert isinstance(restored.dropped_findings[0], ReviewFinding)
+
+
 def test_review_result_errored_carries_error_string():
     result = ReviewResult(
         request_id="req-6",
