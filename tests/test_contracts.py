@@ -124,6 +124,33 @@ def test_review_result_without_usage():
     assert restored.disposition == "dry_run"
 
 
+def test_review_result_dropped_findings_round_trip():
+    """dropped_findings (the distill audit trail) defaults to empty and
+    survives to_dict/from_dict as reconstructed ReviewFinding objects.
+    The empty case is OMITTED from the wire shape (no-drop responses keep
+    their pre-existing shape); a populated one is present and round-trips.
+    """
+    empty = ReviewResult(request_id="r", summary="s")
+    assert empty.dropped_findings == []
+    assert "dropped_findings" not in empty.to_dict()  # omit-when-empty
+
+    result = ReviewResult(
+        request_id="req-dropped",
+        summary="one concern (1 nit filtered).",
+        findings=[ReviewFinding(severity="concern", title="real", body="b")],
+        dropped_findings=[
+            ReviewFinding(severity="nit", title="below floor", body="filtered out"),
+        ],
+        disposition="posted",
+    )
+    wire = result.to_dict()
+    assert len(wire["dropped_findings"]) == 1  # present when non-empty
+    restored = ReviewResult.from_dict(wire)
+    assert restored == result
+    assert [f.title for f in restored.dropped_findings] == ["below floor"]
+    assert isinstance(restored.dropped_findings[0], ReviewFinding)
+
+
 def test_review_result_errored_carries_error_string():
     result = ReviewResult(
         request_id="req-6",

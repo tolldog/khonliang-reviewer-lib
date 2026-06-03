@@ -208,6 +208,13 @@ class ReviewResult:
     backend: str = ""
     model: str = ""
     created_at: float = field(default_factory=time.time)
+    #: Findings the distill pipeline removed (severity floor, dedup,
+    #: max_findings cap) — the audit trail that lets audit / benchmark
+    #: corpora recover the full raw output. Empty by default (and always
+    #: empty on the raw provider path / the ``audit_corpus`` audience,
+    #: which skips distillation). Populated by the consuming pipeline, not
+    #: by providers.
+    dropped_findings: list[ReviewFinding] = field(default_factory=list)
 
     def to_dict(self) -> dict[str, Any]:
         """Serialize to a plain ``dict``.
@@ -224,6 +231,11 @@ class ReviewResult:
         data = asdict(self)
         if self.usage is not None:
             data["usage"] = self.usage.to_dict()
+        # Omit dropped_findings when empty so the common (no-drop) path's
+        # on-wire shape is unchanged — mirrors UsageEvent.to_dict's
+        # omit-when-zero convention. from_dict treats a missing key as [].
+        if not self.dropped_findings:
+            data.pop("dropped_findings", None)
         return data
 
     @classmethod
@@ -233,6 +245,11 @@ class ReviewResult:
         data["findings"] = [
             ReviewFinding.from_dict(f) if isinstance(f, dict) else f
             for f in findings
+        ]
+        dropped = data.get("dropped_findings") or []
+        data["dropped_findings"] = [
+            ReviewFinding.from_dict(f) if isinstance(f, dict) else f
+            for f in dropped
         ]
         usage = data.get("usage")
         if isinstance(usage, dict):
