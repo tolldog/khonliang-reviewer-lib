@@ -125,6 +125,11 @@ class ReviewFinding:
     A summary-level note leaves ``path`` and ``line`` unset. An inline comment
     fills both. ``suggestion`` carries the body of a GitHub-style suggestion
     block when the reviewer proposes a concrete patch.
+
+    ``section`` is the whole-document analogue of ``line``: artifact reviews
+    (FRs / specs / milestones) produce holistic findings anchored to a named
+    section (e.g. ``"§Acceptance Criteria"``) rather than a diff line. Diff
+    reviews leave it unset; artifact reviews leave ``line`` unset.
     """
 
     severity: Severity
@@ -134,6 +139,9 @@ class ReviewFinding:
     path: str | None = None
     line: int | None = None
     suggestion: str | None = None
+    # Appended last (not between line/suggestion) to preserve the positional
+    # constructor order for any positional caller (PR #6 review).
+    section: str | None = None
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)

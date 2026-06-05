@@ -63,7 +63,31 @@ def test_review_finding_summary_level_has_no_anchor():
     restored = ReviewFinding.from_dict(finding.to_dict())
     assert restored.path is None
     assert restored.line is None
+    assert restored.section is None
     assert restored.suggestion is None
+
+
+def test_review_finding_section_anchor_round_trip():
+    # Artifact reviews anchor to a named section instead of a diff line.
+    finding = ReviewFinding(
+        severity="concern",
+        title="Acceptance criteria are untestable",
+        body="No observable signal for 'works correctly'.",
+        category="spec",
+        section="§Acceptance Criteria",
+    )
+    restored = ReviewFinding.from_dict(finding.to_dict())
+    assert restored == finding
+    assert restored.section == "§Acceptance Criteria"
+    assert restored.line is None
+
+
+def test_review_finding_from_dict_without_section_defaults_none():
+    # Pre-section payloads (no 'section' key) still parse.
+    restored = ReviewFinding.from_dict(
+        {"severity": "nit", "title": "t", "body": "b"}
+    )
+    assert restored.section is None
 
 
 def test_usage_event_round_trip():
