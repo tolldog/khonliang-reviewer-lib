@@ -138,8 +138,10 @@ class ReviewFinding:
     category: str = ""
     path: str | None = None
     line: int | None = None
-    section: str | None = None
     suggestion: str | None = None
+    # Appended last (not between line/suggestion) to preserve the positional
+    # constructor order for any positional caller (PR #6 review).
+    section: str | None = None
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)
