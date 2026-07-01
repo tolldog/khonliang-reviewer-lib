@@ -14,6 +14,7 @@ from khonliang_reviewer import (
     ReviewRequest,
     ReviewResult,
     UsageEvent,
+    Verdict,
     severity_rank,
 )
 
@@ -173,6 +174,45 @@ def test_review_result_dropped_findings_round_trip():
     assert restored == result
     assert [f.title for f in restored.dropped_findings] == ["below floor"]
     assert isinstance(restored.dropped_findings[0], ReviewFinding)
+
+
+def test_verdict_round_trip():
+    v = Verdict(
+        dimension="correctness",
+        question="Does the change preserve the documented invariant?",
+        answer=True,
+        explanation="The added guard enforces it on the previously-missing path.",
+    )
+    assert Verdict.from_dict(v.to_dict()) == v
+    # explanation defaults to empty.
+    bare = Verdict(dimension="tests", question="Are new paths tested?", answer=False)
+    assert Verdict.from_dict(bare.to_dict()) == bare
+    assert bare.explanation == ""
+
+
+def test_review_result_verdicts_round_trip():
+    """verdicts (BinEval scoring) default to empty and are OMITTED from the wire
+    shape on holistic reviews; a populated list round-trips as Verdict objects."""
+    empty = ReviewResult(request_id="r", summary="s")
+    assert empty.verdicts == []
+    assert "verdicts" not in empty.to_dict()  # omit-when-empty (holistic unchanged)
+
+    result = ReviewResult(
+        request_id="req-bin",
+        summary="binary-questions scoring",
+        verdicts=[
+            Verdict(dimension="correctness", question="Q1?", answer=True, explanation="e1"),
+            Verdict(dimension="security", question="Q2?", answer=False, explanation="e2"),
+        ],
+    )
+    wire = result.to_dict()
+    assert len(wire["verdicts"]) == 2  # present when non-empty
+    restored = ReviewResult.from_dict(wire)
+    assert restored == result
+    assert isinstance(restored.verdicts[0], Verdict)
+    assert [v.answer for v in restored.verdicts] == [True, False]
+    # JSON survives too (the on-wire path).
+    assert ReviewResult.from_dict(json.loads(json.dumps(wire))) == result
 
 
 def test_review_result_errored_carries_error_string():

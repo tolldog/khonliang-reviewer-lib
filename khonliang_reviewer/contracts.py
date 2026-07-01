@@ -152,6 +152,31 @@ class ReviewFinding:
 
 
 @dataclass
+class Verdict:
+    """A single binary-question verdict (BinEval-style scoring).
+
+    Produced only in the ``binary_questions`` scoring mode: the reviewer
+    decomposes a review ``dimension`` (e.g. ``"correctness"``, ``"security"``)
+    into an atomic yes/no ``question`` about the diff, answers it, and grounds
+    the answer in a short ``explanation``. ``answer`` is the reviewer's yes/no
+    for the question as phrased; per-dimension and overall scores are derived
+    downstream (fraction of ``True`` answers). Holistic mode emits none.
+    """
+
+    dimension: str
+    question: str
+    answer: bool
+    explanation: str = ""
+
+    def to_dict(self) -> dict[str, Any]:
+        return asdict(self)
+
+    @classmethod
+    def from_dict(cls, data: dict[str, Any]) -> "Verdict":
+        return cls(**data)
+
+
+@dataclass
 class UsageEvent:
     """Per-review token accounting record.
 
@@ -223,6 +248,11 @@ class ReviewResult:
     #: which skips distillation). Populated by the consuming pipeline, not
     #: by providers.
     dropped_findings: list[ReviewFinding] = field(default_factory=list)
+    #: Binary-question verdicts (BinEval scoring mode). Empty by default and
+    #: on every holistic review; populated only when the caller requests
+    #: ``scoring_mode="binary_questions"``. Appended last to preserve the
+    #: positional constructor order for existing callers.
+    verdicts: list["Verdict"] = field(default_factory=list)
 
     def to_dict(self) -> dict[str, Any]:
         """Serialize to a plain ``dict``.
@@ -244,6 +274,10 @@ class ReviewResult:
         # omit-when-zero convention. from_dict treats a missing key as [].
         if not self.dropped_findings:
             data.pop("dropped_findings", None)
+        # Same omit-when-empty convention: holistic reviews (the common path)
+        # carry no verdicts, so their on-wire shape is unchanged.
+        if not self.verdicts:
+            data.pop("verdicts", None)
         return data
 
     @classmethod
@@ -258,6 +292,10 @@ class ReviewResult:
         data["dropped_findings"] = [
             ReviewFinding.from_dict(f) if isinstance(f, dict) else f
             for f in dropped
+        ]
+        verdicts = data.get("verdicts") or []
+        data["verdicts"] = [
+            Verdict.from_dict(v) if isinstance(v, dict) else v for v in verdicts
         ]
         usage = data.get("usage")
         if isinstance(usage, dict):
@@ -275,5 +313,6 @@ __all__ = [
     "SEVERITY_ORDER",
     "Severity",
     "UsageEvent",
+    "Verdict",
     "severity_rank",
 ]
