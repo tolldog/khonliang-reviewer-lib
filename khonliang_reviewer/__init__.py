@@ -16,6 +16,7 @@ from khonliang_reviewer.contracts import (
     ReviewResult,
     Severity,
     UsageEvent,
+    Verdict,
     severity_rank,
 )
 from khonliang_reviewer.pricing import ModelPricing, estimate_api_cost
@@ -34,6 +35,7 @@ __all__ = [
     "SEVERITY_ORDER",
     "Severity",
     "UsageEvent",
+    "Verdict",
     "estimate_api_cost",
     "severity_rank",
 ]
